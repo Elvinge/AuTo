@@ -1,0 +1,38 @@
+import pytest
+
+# Фикстура для подготовки тестовой среды (например, создание временной директории)
+@pytest.fixture
+def test_environment(tmpdir):
+    # Создайте несколько файлов и каталогов во временной директории
+    tmpdir.mkdir("dir1").join("file1.txt").write("Contents of file1.txt")
+    tmpdir.mkdir("dir2").join("file2.txt").write("Contents of file2.txt")
+    tmpdir.mkdir("empty_dir")
+
+    return tmpdir
+
+# Тест для команды вывода списка файлов (l)
+def test_list_files_command(test_environment, capsys):
+    # Вызовите команду 'l' для вывода списка файлов
+    list_files_command(test_environment)
+
+    # Получите вывод команды
+    captured = capsys.readouterr()
+    output_lines = captured.out.splitlines()
+
+    # Проверьте, что вывод содержит ожидаемые файлы и каталоги
+    expected_files = ["dir1", "dir2", "empty_dir"]
+    for expected_file in expected_files:
+        assert expected_file in output_lines
+
+# Тест для команды разархивирования с путями (x)
+def test_extract_with_paths_command(test_environment):
+    # Вызовите команду 'x' для разархивирования с путями
+    extract_with_paths_command(test_environment)
+
+    # Проверьте, что файлы и каталоги разархивированы с сохранением исходной структуры
+    assert test_environment.join("dir1").join("file1.txt").read() == "Contents of file1.txt"
+    assert test_environment.join("dir2").join("file2.txt").read() == "Contents of file2.txt"
+    assert test_environment.join("empty_dir").check(dir=True)
+
+if __name__ == "__main__":
+    pytest.main()
