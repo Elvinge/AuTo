@@ -86,3 +86,35 @@ class TestPositive:
         command5 = "ls {}/{}".format(data["folder_ext2"], make_subfolder[0])
         command6 = "ls {}/{}".format(data["folder_ext2"], make_subfolder[1])
         res.append(all(self.ssh_command(cmd)[0] == make_subfolder[0] for cmd in [command4, command5]))
+
+# ... (предыдущий код)
+
+    def test_step8(self, start_time):
+        command = "cd {}; 7z d arx2.7z".format(data["folder_out"])
+        self.save_log(start_time, "log8.txt")
+        assert "Everything is Ok" in self.ssh_command(command)[0], "test8 FAIL"
+
+    def test_step9(self, clear_folders, make_files, start_time):
+        self.save_log(start_time, "log9.txt")
+        res = []
+        for item in make_files:
+            command1 = "cd {}; 7z h {}".format(data["folder_in"], item)
+            command2 = "cd {}; crc32 {}".format(data["folder_in"], item)
+            hash_value = self.ssh_command(command2)[0].upper()
+            res.append(all(self.ssh_command(cmd)[0] == "Everything is Ok" for cmd in [command1, command2, hash_value]))
+        assert all(res), "test9 FAIL"
+
+    def test_step10(self, start_time):
+        res = []
+        command1 = "echo '{}' | sudo -S dpkg -r {}".format(data["passwd"], data["pkgname"])
+        command2 = "echo '{}' | sudo -S dpkg -s {}".format(data["passwd"], data["pkgname"])
+        res.append(ssh_checkout(data["ip"], data["user"], data["passwd"], command1, "Удаляется"))
+        res.append(ssh_checkout(data["ip"], data["user"], data["passwd"], command2, "Status: deinstall ok"))
+        self.save_log(start_time, "log10.txt")
+        assert all(res), "test10 FAIL"
+
+    def __del__(self):
+        self.ssh.close()
+
+
+
