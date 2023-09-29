@@ -1,0 +1,91 @@
+import paramiko
+import yaml
+from checkers import getout
+from sshcheckers import ssh_checkout, upload_files, ssh_getout
+
+with open('config.yaml') as f:
+    data = yaml.safe_load(f)
+
+class TestPositive:
+    def __init__(self):
+        # Создание объекта SSH
+        self.ssh = paramiko.SSHClient()
+        self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        self.ssh.connect(data["ip"], username=data["user"], password=data["passwd"])
+
+    def ssh_command(self, command):
+        # Выполнение команды по SSH
+        stdin, stdout, stderr = self.ssh.exec_command(command)
+        
+        # Получение результатов выполнения команды
+        output = stdout.read().decode("utf-8")
+        error = stderr.read().decode("utf-8")
+
+        return output, error
+
+    def save_log(self, starttime, name):
+        command = "journalctl --since '{}' > {}".format(starttime, name)
+        self.ssh_command(command)
+
+    def test_step1(self, start_time):
+        res = []
+        upload_files(data["ip"], data["user"], data["passwd"], data["pkgname"]+".deb",
+                     "/home/{}/{}.deb".format(data["user"], data["pkgname"]))
+        command1 = "echo '{}' | sudo -S dpkg -i /home/{}/{}.deb".format(data["passwd"], data["user"], data["pkgname"])
+        command2 = "echo '{}' | sudo -S dpkg -s {}".format(data["passwd"], data["pkgname"])
+        res.append(ssh_checkout(data["ip"], data["user"], data["passwd"], command1, "Настраивается пакет"))
+        res.append(ssh_checkout(data["ip"], data["user"], data["passwd"], command2, "Status: install ok installed"))
+        self.save_log(start_time, "log1.txt")
+        assert all(res), "test1 FAIL"
+
+    def test_step2(self, make_folders, clear_folders, make_files, start_time):
+        command1 = "cd {}; 7z a {}/arx2".format(data["folder_in"], data["folder_out"])
+        command2 = "ls {}".format(data["folder_out"])
+        res1, _ = self.ssh_command(command1)
+        res2, _ = self.ssh_command(command2)
+        self.save_log(start_time, "log2.txt")
+        assert "Everything is Ok" in res1 and "arx2.7z" in res2, "test2 FAIL"
+
+    def test_step3(self, clear_folders, make_files, start_time):
+        res = []
+        command1 = "cd {}; 7z a {}/arx2".format(data["folder_in"], data["folder_out"])
+        command2 = "cd {}; 7z e arx2.7z -o{} -y".format(data["folder_out"], data["folder_ext"])
+        res.append(all(self.ssh_command(cmd)[0] == "Everything is Ok" for cmd in [command1, command2]))
+        for item in make_files:
+            command3 = "ls {}".format(data["folder_ext"])
+            res.append(item in self.ssh_command(command3)[0])
+        self.save_log(start_time, "log3.txt")
+        assert all(res), "test3 FAIL"
+
+    def test_step4(self, start_time):
+        command = "cd {}; 7z t arx2.7z".format(data["folder_out"])
+        self.save_log(start_time, "log4.txt")
+        assert "Everything is Ok" in self.ssh_command(command)[0], "test4 FAIL"
+
+    def test_step5(self, start_time):
+        command = "cd {}; 7z u arx2.7z".format(data["folder_in"])
+        self.save_log(start_time, "log5.txt")
+        assert "Everything is Ok" in self.ssh_command(command)[0], "test5 FAIL"
+
+    def test_step6(self, clear_folders, make_files, start_time):
+        res = []
+        command1 = "cd {}; 7z a {}/arx2".format(data["folder_in"], data["folder_out"])
+        res.append(self.ssh_command(command1)[0] == "Everything is Ok")
+        for item in make_files:
+            command2 = "cd {}; 7z l arx2.7z".format(data["folder_out"])
+            res.append(item in self.ssh_command(command2)[0])
+        self.save_log(start_time, "log6.txt")
+        assert all(res), "test6 FAIL"
+
+    def test_step7(self, clear_folders, make_files, make_subfolder, start_time):
+        res = []
+        command1 = "cd {}; 7z a {}/arx".format(data["folder_in"], data["folder_out"])
+        command2 = "cd {}; 7z x arx.7z -o{} -y".format(data["folder_out"], data["folder_ext2"])
+        res.append(all(self.ssh_command(cmd)[0] == "Everything is Ok" for cmd in [command1, command2]))
+        for item in make_files:
+            command3 = "ls {}".format(data["folder_ext2"])
+            res.append(item in self.ssh_command(command3)[0])
+        command4 = "ls {}".format(data["folder_ext2"])
+        command5 = "ls {}/{}".format(data["folder_ext2"], make_subfolder[0])
+        command6 = "ls {}/{}".format(data["folder_ext2"], make_subfolder[1])
+        res.append(all(self.ssh_command(cmd)[0] == make_subfolder[0] for cmd in [command4, command5]))
